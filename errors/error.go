@@ -103,8 +103,9 @@ func (e *Error) Error() string {
 			} else {
 				fmt.Fprintf(w, "    %s\t= %s\n", parts[0], parts[1])
 			}
-			w.Flush()
 		}
+
+		w.Flush()
 	}
 
 	if len(e.stack) > 0 {
