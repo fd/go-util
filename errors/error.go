@@ -84,7 +84,7 @@ func (e *Error) Error() string {
 	fmt.Fprintf(&buf, "error: %s\n", e.message)
 
 	if basic_child {
-		fmt.Fprintf(&buf, "  message: %s\b", e.err)
+		fmt.Fprintf(&buf, "  message: %s\n", e.err)
 	}
 
 	if len(e.context) > 0 {
