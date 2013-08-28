@@ -10,6 +10,8 @@ import (
 	"text/tabwriter"
 )
 
+var StackSize = 3
+
 type Error struct {
 	err     error
 	message string
@@ -63,7 +65,7 @@ func (e *Error) AddContext(format string, args ...interface{}) {
 
 func (e *Error) Error() string {
 	if e == nil {
-		return ""
+		return "(no error)"
 	}
 
 	var (
@@ -110,8 +112,8 @@ func (e *Error) Error() string {
 
 		stack := strings.TrimSpace(e.stack)
 		parts := strings.Split(stack, "\n")
-		if len(parts) > 6 {
-			parts = parts[:6]
+		if len(parts) > StackSize*2 {
+			parts = parts[:StackSize*2]
 		}
 
 		for _, line := range parts {
