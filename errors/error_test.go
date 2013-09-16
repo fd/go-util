@@ -1,69 +1,57 @@
 package errors
 
 import (
-	"encoding/json"
-	"fmt"
+	"bytes"
+	"flag"
+	"io/ioutil"
+	"os/exec"
+	"strings"
+	"testing"
 )
 
-func ExampleAnnotate() {
-	err := New("%s err", "foo")
-	err.AddContext("hello=%s", "world")
+func TestAnnotateNested(t *testing.T) {
+	err1 := New("%s err", "foo")
+	err1.AddContext("hello=%s", "world")
 
-	err = Annotate(err, "%s err", "bar")
-	err.AddContext("c=%d", 7)
-	err.AddContext("a=%d", 42)
+	err2 := Annotate(err1, "%s err", "bar")
+	err2.AddContext("c=%d", 7)
+	err2.AddContext("a=%d", 42)
 
-	fmt.Println(err)
-
-	// Output:
-	// error: bar err
-	//   context:
-	//     a = 42
-	//     c = 7
-	//   location:
-	//     /Users/fd/src/go/src/github.com/fd/go-util/errors/annotation_test.go:11 (0x33cd6)
-	//       com/fd/go-util/errors.ExampleAnnotate: err = Annotate(err, "%s err", "bar")
-	//     /opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:98 (0x2d1e5)
-	//       runExample: eg.F()
-	//     /opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:36 (0x2ce27)
-	//       RunExamples: if !runExample(eg) {
-	//   error: foo err
-	//     context:
-	//       hello = world
-	//     location:
-	//       /Users/fd/src/go/src/github.com/fd/go-util/errors/annotation_test.go:8 (0x33b2b)
-	//         com/fd/go-util/errors.ExampleAnnotate: err := New("%s err", "foo")
-	//       /opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:98 (0x2d1e5)
-	//         runExample: eg.F()
-	//       /opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:36 (0x2ce27)
-	//         RunExamples: if !runExample(eg) {
+	diff(t, "new", err1.Error())
+	diff(t, "annotate", err2.Error())
 }
 
-func ExampleAnnotateJSON() {
-	err := New("%s err", "foo")
-	err.AddContext("hello=%s", "world")
+var write_generated = flag.Bool("write-generated", false, "Write generated error messages")
 
-	err = Annotate(err, "%s err", "bar")
-	err.AddContext("c=%d", 7)
-	err.AddContext("a=%d", 42)
+func diff(t *testing.T, golden, generated string) {
+	if write_generated != nil && *write_generated {
+		err := ioutil.WriteFile("testdata/"+golden+".txt", []byte(generated), 0644)
+		if err != nil {
+			panic(err)
+		}
+	}
 
-	data, _ := json.MarshalIndent(err, "", "  ")
-	fmt.Println(string(data))
+	data, err := ioutil.ReadFile("testdata/" + golden + ".txt")
+	if err != nil {
+		panic(err)
+	}
 
-	// Output:
-	// {
-	//   "message": "bar err",
-	//   "context": {
-	//     "a": "42",
-	//     "c": "7"
-	//   },
-	//   "stack": "/Users/fd/src/go/src/github.com/fd/go-util/errors/error_test.go:46 (0x34445)\n  com/fd/go-util/errors.ExampleAnnotateJSON: err = Annotate(err, \"%s err\", \"bar\")\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:98 (0x2d1d5)\n  runExample: eg.F()\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:36 (0x2ce17)\n  RunExamples: if !runExample(eg) {\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/testing.go:366 (0x2df5c)\n  Main: exampleOk := RunExamples(matchString, examples)\ngithub.com/fd/go-util/errors/_test/_testmain.go:45 (0x21ca)\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/runtime/proc.c:182 (0x15592)\n  main: main·main();\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/runtime/proc.c:1223 (0x17420)\n  goexit: runtime·goexit(void)\n",
-	//   "error": {
-	//     "message": "foo err",
-	//     "context": {
-	//       "hello": "world"
-	//     },
-	//     "stack": "/Users/fd/src/go/src/github.com/fd/go-util/errors/error_test.go:43 (0x342a0)\n  com/fd/go-util/errors.ExampleAnnotateJSON: err := New(\"%s err\", \"foo\")\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:98 (0x2d1d5)\n  runExample: eg.F()\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/example.go:36 (0x2ce17)\n  RunExamples: if !runExample(eg) {\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/testing/testing.go:366 (0x2df5c)\n  Main: exampleOk := RunExamples(matchString, examples)\ngithub.com/fd/go-util/errors/_test/_testmain.go:45 (0x21ca)\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/runtime/proc.c:182 (0x15592)\n  main: main·main();\n/opt/boxen/homebrew/Cellar/golang/1.1-boxen1/src/pkg/runtime/proc.c:1223 (0x17420)\n  goexit: runtime·goexit(void)\n"
-	//   }
-	// }
+	golden_str := string(data)
+	golden_str = strings.TrimRight(golden_str, "\n") // trim off trailing \n
+
+	if golden_str == generated {
+		return
+	}
+
+	cmd := exec.Command("diff", "--ignore-space-change", "-U", "5", "--to-file", "-", "testdata/"+golden+".txt")
+	cmd.Stdin = bytes.NewReader([]byte(generated))
+	output, err := cmd.CombinedOutput()
+	if _, ok := err.(*exec.ExitError); ok && err.Error() == "exit status 1" {
+		t.Errorf("%s failed:\n%s\n", golden, output)
+		return
+	}
+	if err != nil {
+		t.Error(string(output))
+		panic(err)
+	}
 }

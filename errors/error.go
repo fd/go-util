@@ -4,30 +4,56 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"text/tabwriter"
 )
 
-var StackSize = 3
+var StackLimit = 3
+var StackContext = 3
 
 type Error struct {
 	err     error
 	message string
 	context []string
-	stack   string
+	stack   Stack
+}
+
+func Guard(f func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = NewFromPanic(r)
+		}
+	}()
+
+	err = f()
+	return
+}
+
+func NewFromPanic(r interface{}) *Error {
+	if r == nil {
+		return nil
+	}
+
+	if err, ok := r.(*Error); ok {
+		return Annotate(err, "panic: %s", err.message)
+	}
+
+	if err, ok := r.(error); ok {
+		return Annotate(err, "panic: %s", err)
+	}
+
+	if msg, ok := r.(string); ok {
+		return New("panic: %s", msg)
+	}
+
+	return New("panic: %+v", r)
 }
 
 func New(message string, args ...interface{}) *Error {
-	stack := string(debug.Stack())
-	parts := strings.SplitN(string(debug.Stack()), "\n", 3)
-	stack = parts[2]
-	stack = strings.Replace(stack, "\t", "  ", -1)
-
 	return &Error{
 		message: fmt.Sprintf(message, args...),
-		stack:   stack,
+		stack:   CaptureStack().Skip(2),
 	}
 }
 
@@ -40,15 +66,10 @@ func Annotate(err error, message string, args ...interface{}) *Error {
 		return nil
 	}
 
-	stack := string(debug.Stack())
-	parts := strings.SplitN(string(debug.Stack()), "\n", 3)
-	stack = parts[2]
-	stack = strings.Replace(stack, "\t", "  ", -1)
-
 	return &Error{
 		err:     err,
 		message: fmt.Sprintf(message, args...),
-		stack:   stack,
+		stack:   CaptureStack().Skip(2),
 	}
 }
 
@@ -109,17 +130,15 @@ func (e *Error) Error() string {
 	}
 
 	if len(e.stack) > 0 {
-		fmt.Fprintln(&buf, "  location:")
+		stack := e.stack.Limit(StackLimit).String()
+		stack = strings.Replace(stack, "\n", "\n    ", -1)
+		fmt.Fprintf(&buf, "  location:\n    %s\n", stack)
 
-		stack := strings.TrimSpace(e.stack)
-		parts := strings.Split(stack, "\n")
-		if len(parts) > StackSize*2 {
-			parts = parts[:StackSize*2]
-		}
-
-		for _, line := range parts {
-			fmt.Fprintf(&buf, "    %s\n", line)
-		}
+		// stack := strings.TrimSpace(e.stack)
+		// parts := strings.Split(stack, "\n")
+		// if len(parts) > StackSize*2 {
+		//   parts = parts[:StackSize*2]
+		// }
 	}
 
 	if extended_child {
@@ -163,7 +182,7 @@ func (e *Error) MarshalJSON() ([]byte, error) {
 	json_err := json_Error{
 		Error:   e.err,
 		Message: e.message,
-		Stack:   e.stack,
+		Stack:   e.stack.Limit(StackLimit).String(),
 		Context: ctx,
 	}
 
