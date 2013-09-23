@@ -2,7 +2,6 @@ package errors
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -17,8 +16,22 @@ type Error struct {
 	message string
 	context []string
 	stack   Stack
+	fatal   bool
 }
 
+func IsFatal(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if e, ok := err.(*Error); ok {
+		return e.fatal
+	}
+
+	return true
+}
+
+// Capture any panic() in f() and return it as an error.
 func Guard(f func() error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -30,6 +43,7 @@ func Guard(f func() error) (err error) {
 	return
 }
 
+// Make a new Error from a panic()
 func NewFromPanic(r interface{}) *Error {
 	if r == nil {
 		return nil
@@ -50,13 +64,16 @@ func NewFromPanic(r interface{}) *Error {
 	return New("panic: %+v", r)
 }
 
+// Make a new Error
 func New(message string, args ...interface{}) *Error {
 	return &Error{
 		message: fmt.Sprintf(message, args...),
 		stack:   CaptureStack().Skip(2),
+		fatal:   true,
 	}
 }
 
+// Wrap err in an new Error
 func Annotate(err error, message string, args ...interface{}) *Error {
 	if l, ok := err.(List); ok {
 		err = l.Normalize()
@@ -70,9 +87,19 @@ func Annotate(err error, message string, args ...interface{}) *Error {
 		err:     err,
 		message: fmt.Sprintf(message, args...),
 		stack:   CaptureStack().Skip(2),
+		fatal:   true,
 	}
 }
 
+func (e *Error) SetFatal(flag bool) {
+	if e == nil {
+		return
+	}
+
+	e.fatal = flag
+}
+
+// Add some context to an error
 func (e *Error) AddContext(format string, args ...interface{}) {
 	if e == nil {
 		return
@@ -133,12 +160,6 @@ func (e *Error) Error() string {
 		stack := e.stack.Limit(StackLimit).String()
 		stack = strings.Replace(stack, "\n", "\n    ", -1)
 		fmt.Fprintf(&buf, "  location:\n    %s\n", stack)
-
-		// stack := strings.TrimSpace(e.stack)
-		// parts := strings.Split(stack, "\n")
-		// if len(parts) > StackSize*2 {
-		//   parts = parts[:StackSize*2]
-		// }
 	}
 
 	if extended_child {
@@ -149,42 +170,4 @@ func (e *Error) Error() string {
 	}
 
 	return buf.String()
-}
-
-type json_Error struct {
-	Message string                 `json:"message,omitempty"`
-	Context map[string]interface{} `json:"context,omitempty"`
-	Stack   string                 `json:"stack,omitempty"`
-	Error   interface{}            `json:"error,omitempty"`
-}
-
-func (e *Error) MarshalJSON() ([]byte, error) {
-	if e == nil {
-		return []byte("null"), nil
-	}
-
-	var (
-		ctx map[string]interface{}
-	)
-
-	if len(e.context) > 0 {
-		ctx = make(map[string]interface{}, len(e.context))
-		for _, pair := range e.context {
-			parts := strings.SplitN(pair, "=", 2)
-			if len(parts) == 1 {
-				ctx[parts[0]] = true
-			} else {
-				ctx[parts[0]] = parts[1]
-			}
-		}
-	}
-
-	json_err := json_Error{
-		Error:   e.err,
-		Message: e.message,
-		Stack:   e.stack.Limit(StackLimit).String(),
-		Context: ctx,
-	}
-
-	return json.Marshal(json_err)
 }

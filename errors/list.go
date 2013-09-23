@@ -1,7 +1,6 @@
 package errors
 
 import (
-	"encoding/json"
 	"strings"
 )
 
@@ -44,22 +43,4 @@ func (l List) Error() string {
 	}
 
 	return strings.Join(s, "\n")
-}
-
-func (l List) MarshalJSON() ([]byte, error) {
-	if !l.HasErrors() {
-		return []byte("null"), nil
-	}
-
-	s := make([]interface{}, len(l))
-
-	for i, err := range l {
-		if _, ok := err.(json.Marshaler); ok {
-			s[i] = err
-		} else {
-			s[i] = err.Error()
-		}
-	}
-
-	return json.Marshal(s)
 }
