@@ -3,15 +3,39 @@ package log
 import (
 	"fmt"
 	"io"
+	"os"
 )
 
-func New(w io.Writer, l Level) Logger {
-	return &logger{w, l}
+func New(w io.Writer, l Level, namespace string) Logger {
+	if w == nil {
+		w = os.Stdout
+	}
+
+	return &logger{w, namespace, l}
 }
 
 type logger struct {
-	w     io.Writer
-	level Level
+	w         io.Writer
+	namespace string
+	level     Level
+}
+
+func (l *logger) Namespace() string {
+	return l.namespace
+}
+
+func (l *logger) Sub(level Level, namespace string) Logger {
+	if namespace == "" {
+		namespace = l.namespace
+	} else if l.namespace != "" {
+		namespace = l.namespace + "/" + namespace
+	}
+
+	if level == DEFAULT {
+		level = l.level
+	}
+
+	return New(l.w, level, namespace)
 }
 
 func (l *logger) Debug(args ...interface{}) {

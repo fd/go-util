@@ -18,7 +18,11 @@ func (l *logger) format(level Level, s string) string {
 	}
 
 	// format the message
-	s = fmt.Sprintf("[%c] %s\n", code, s)
+	if l.namespace == "" {
+		s = fmt.Sprintf("[%c] %s\n", code, s)
+	} else {
+		s = fmt.Sprintf("[%c] %s: %s\n", code, l.namespace, s)
+	}
 
 	return s
 }
