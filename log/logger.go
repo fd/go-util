@@ -20,6 +20,12 @@ type logger struct {
 	level     Level
 }
 
+func (l *logger) SetLevel(lvl Level) {
+	if lvl != DEFAULT {
+		l.level = lvl
+	}
+}
+
 func (l *logger) Namespace() string {
 	return l.namespace
 }

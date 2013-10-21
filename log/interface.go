@@ -15,6 +15,8 @@ const (
 )
 
 type Logger interface {
+	SetLevel(lvl Level)
+
 	Debug(args ...interface{})
 	Debugf(format string, args ...interface{})
 	Info(args ...interface{})
@@ -33,6 +35,10 @@ type Logger interface {
 }
 
 var DefaultLogger = New(nil, INFO, "")
+
+func SetLevel(lvl Level) {
+	DefaultLogger.SetLevel(lvl)
+}
 
 func Debug(args ...interface{}) {
 	DefaultLogger.Debug(args...)
