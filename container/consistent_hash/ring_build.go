@@ -1,78 +1,40 @@
 package consistent_hash
 
 import (
-	"crypto/sha1"
-	"fmt"
+	"hash/crc32"
 	"sort"
 )
 
-func New(l []Node, buckets int) Ring {
+func New(l []Node, buckets uint16) Ring {
 	e := wrap_nodes(l, buckets)
-	e = make_entrie_hashes(e)
 	e = sort_entries(e)
-	e = remove_duplicate_entries(e)
-	e = make_entry_rings(e, l)
+	e = make_entry_rings(e, len(l))
 	return Ring{l, e}
 }
 
-func wrap_nodes(l []Node, buckets int) []entry_t {
-	o := make([]entry_t, len(l)*buckets)
+func wrap_nodes(l []Node, buckets uint16) []entry_t {
+	var (
+		o = make([]entry_t, len(l)*int(buckets))
+		b [1024]byte
+	)
 
 	for i, n := range l {
 		node_id := n.HashID()
+		node_id_bytes := b[:len(node_id)+3]
+		copy(node_id_bytes[2:], node_id+"•")
 
-		for j := 0; j < buckets; j++ {
-			o[i*buckets+j] = entry_t{
-				Node:      n,
-				node_id:   node_id,
-				partition: j,
+		for j := 0; j < int(buckets); j++ {
+			node_id_bytes[0] = byte(uint16(j)>>8 | 0xFF)
+			node_id_bytes[1] = byte(uint16(j) | 0xFF)
+
+			o[i*int(buckets)+j] = entry_t{
+				node_idx:   uint8(i),
+				entry_hash: crc32.ChecksumIEEE(node_id_bytes),
 			}
 		}
 	}
 
 	return o
-}
-
-func make_entrie_hashes(entries []entry_t) []entry_t {
-	var (
-		b   [20]byte
-		l   []byte
-		sha = sha1.New()
-	)
-
-	for i, e := range entries {
-		l = b[:0]
-
-		sha.Reset()
-		fmt.Fprintln(sha, e.node_id)
-		l = sha.Sum(l)
-
-		e.node_hash = uint64(l[0])<<56 |
-			uint64(l[1])<<48 |
-			uint64(l[2])<<40 |
-			uint64(l[3])<<32 |
-			uint64(l[4])<<24 |
-			uint64(l[5])<<16 |
-			uint64(l[6])<<8 |
-			uint64(l[7])
-
-		l = b[:0]
-		fmt.Fprintln(sha, e.partition)
-		l = sha.Sum(l)
-
-		e.entry_hash = uint64(l[0])<<56 |
-			uint64(l[1])<<48 |
-			uint64(l[2])<<40 |
-			uint64(l[3])<<32 |
-			uint64(l[4])<<24 |
-			uint64(l[5])<<16 |
-			uint64(l[6])<<8 |
-			uint64(l[7])
-
-		entries[i] = e
-	}
-
-	return entries
 }
 
 func sort_entries(l []entry_t) []entry_t {
@@ -80,69 +42,50 @@ func sort_entries(l []entry_t) []entry_t {
 	return l
 }
 
-func remove_duplicate_entries(l []entry_t) []entry_t {
-	last := l[len(l)-1].node_id
-	o := make([]entry_t, 0, len(l))
-
-	for _, e := range l {
-		if last == e.node_id {
-			continue
-		}
-
-		o = append(o, e)
-		last = e.node_id
-	}
-
-	return o
-}
-
-func make_entry_rings(entries []entry_t, nodes []Node) []entry_t {
+func make_entry_rings(entries []entry_t, l_ring_len int) []entry_t {
 	var (
-		l_ring_len = len(nodes)
 		g_ring_len = len(entries)
-		known_a    = make(map[uint64]int, l_ring_len)
-		known_b    = make(map[uint64]int, l_ring_len)
-		o          = make([]Node, len(entries)*l_ring_len)
+		o          = make([]uint8, len(entries)*l_ring_len)
 		i          = 0
 	)
 
 	// build first l_ring
-	for _, e := range entries {
-		if _, p := known_a[e.node_hash]; !p {
-			o[i] = e.Node
-			known_a[e.node_hash] = i
-			i++
-		}
-	}
-	entries[0].ring = o[:l_ring_len]
 	l := o[:l_ring_len]
+FIRST_RING:
+	for _, e := range entries {
+		for _, node_idx := range l {
+			if node_idx == e.node_idx {
+				continue FIRST_RING
+			}
+		}
+
+		l[i] = e.node_idx
+		i++
+	}
+	entries[0].ring = l
 
 	// build other rings
 	for i := g_ring_len - 1; i > 0; i-- {
 		e := entries[i]
 		r := o[l_ring_len*i : l_ring_len*(i+1)]
 
-		idx := known_a[e.node_hash]
-		if idx == 0 {
+		if l[0] == e.node_idx {
 			copy(r, l)
 		} else {
+			// find idx
+			idx := 0
+			node_idx := uint8(0)
+			for idx, node_idx = range l {
+				if node_idx == e.node_idx {
+					break
+				}
+			}
+
 			r[0] = l[idx]
 			copy(r[1:idx+1], l[:idx])
 			if idx+1 < l_ring_len {
 				copy(r[idx+1:], l[idx+1:])
 			}
-
-			for h, i := range known_a {
-				if i == idx {
-					known_b[h] = 0
-				} else if i < idx {
-					known_b[h] = i + 1
-				} else {
-					known_b[h] = i
-				}
-			}
-
-			known_a, known_b = known_b, known_a
 		}
 
 		e.ring = r

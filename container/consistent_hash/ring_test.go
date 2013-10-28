@@ -10,11 +10,12 @@ func TestBuild(t *testing.T) {
 	nodes := build_nodes(16)
 	ring := New(nodes, 2)
 
-	t.Log(ring.Lookup("hello", 3))
-	t.Log(ring.Lookup("hello", 0))
+	t.Log(ring.Lookup([]byte("hello"), ring.MakeBuffer(3)))
+	t.Log(ring.Lookup([]byte("hello"), ring.MakeBuffer(-1)))
 
-	f := func(k string) bool {
-		nodes := ring.Lookup(k, -1)
+	buf := ring.MakeBuffer(-1)
+	f := func(k []byte) bool {
+		nodes := ring.Lookup(k, buf)
 
 		if len(nodes) != 16 {
 			return false
@@ -33,8 +34,9 @@ func TestBuild(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	f = func(k string) bool {
-		nodes := ring.Lookup(k, 3)
+	buf = ring.MakeBuffer(3)
+	f = func(k []byte) bool {
+		nodes := ring.Lookup(k, buf)
 
 		if len(nodes) != 3 {
 			return false
@@ -57,77 +59,91 @@ func TestBuild(t *testing.T) {
 func BenchmarkLookup_128_25(b *testing.B) {
 	nodes := build_nodes(128)
 	ring := New(nodes, 25)
-	k := "hello"
+	k := []byte("hello")
 	b.ResetTimer()
 
+	buf := ring.MakeBuffer(-1)
+
 	for i := 0; i < b.N; i++ {
-		ring.Lookup(k, -1)
+		ring.Lookup(k, buf)
 	}
 }
 
 func BenchmarkLookup_128_50(b *testing.B) {
 	nodes := build_nodes(128)
 	ring := New(nodes, 50)
-	k := "hello"
+	k := []byte("hello")
 	b.ResetTimer()
 
+	buf := ring.MakeBuffer(-1)
+
 	for i := 0; i < b.N; i++ {
-		ring.Lookup(k, -1)
+		ring.Lookup(k, buf)
 	}
 }
 
 func BenchmarkLookup_128_100(b *testing.B) {
 	nodes := build_nodes(128)
 	ring := New(nodes, 100)
-	k := "hello"
+	k := []byte("hello")
 	b.ResetTimer()
 
+	buf := ring.MakeBuffer(-1)
+
 	for i := 0; i < b.N; i++ {
-		ring.Lookup(k, -1)
+		ring.Lookup(k, buf)
 	}
 }
 
 func BenchmarkLookup_128_200(b *testing.B) {
 	nodes := build_nodes(128)
 	ring := New(nodes, 200)
-	k := "hello"
+	k := []byte("hello")
 	b.ResetTimer()
 
+	buf := ring.MakeBuffer(-1)
+
 	for i := 0; i < b.N; i++ {
-		ring.Lookup(k, -1)
+		ring.Lookup(k, buf)
 	}
 }
 
 func BenchmarkLookup_128_400(b *testing.B) {
 	nodes := build_nodes(128)
 	ring := New(nodes, 400)
-	k := "hello"
+	k := []byte("hello")
 	b.ResetTimer()
 
+	buf := ring.MakeBuffer(-1)
+
 	for i := 0; i < b.N; i++ {
-		ring.Lookup(k, -1)
+		ring.Lookup(k, buf)
+	}
+}
+
+func BenchmarkLookup_128_1024(b *testing.B) {
+	nodes := build_nodes(128)
+	ring := New(nodes, 1024)
+	k := []byte("hello")
+	b.ResetTimer()
+
+	buf := ring.MakeBuffer(-1)
+
+	for i := 0; i < b.N; i++ {
+		ring.Lookup(k, buf)
 	}
 }
 
 func BenchmarkLookup_256_25(b *testing.B) {
 	nodes := build_nodes(256)
 	ring := New(nodes, 25)
-	k := "hello"
+	k := []byte("hello")
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		ring.Lookup(k, -1)
-	}
-}
-
-func BenchmarkLookup_512_25(b *testing.B) {
-	nodes := build_nodes(512)
-	ring := New(nodes, 25)
-	k := "hello"
-	b.ResetTimer()
+	buf := ring.MakeBuffer(-1)
 
 	for i := 0; i < b.N; i++ {
-		ring.Lookup(k, -1)
+		ring.Lookup(k, buf)
 	}
 }
 
@@ -166,16 +182,16 @@ func BenchmarkBuild_128_400(b *testing.B) {
 	}
 }
 
-func BenchmarkBuild_256_25(b *testing.B) {
+func BenchmarkBuild_128_1024(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		nodes := build_nodes(256)
-		New(nodes, 25)
+		nodes := build_nodes(128)
+		New(nodes, 1024)
 	}
 }
 
-func BenchmarkBuild_512_25(b *testing.B) {
+func BenchmarkBuild_256_25(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		nodes := build_nodes(512)
+		nodes := build_nodes(256)
 		New(nodes, 25)
 	}
 }
