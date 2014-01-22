@@ -95,13 +95,30 @@ func (l *logger) Fatalf(format string, args ...interface{}) {
 func (l *logger) emit(level Level, args ...interface{}) {
 	if level >= l.level {
 		entry := l.format(level, fmt.Sprint(args...))
-		l.w.Write([]byte(entry))
+		emit_ch <- emit{l.w, []byte(entry)}
 	}
 }
 
 func (l *logger) emitf(level Level, format string, args ...interface{}) {
 	if level >= l.level {
 		entry := l.format(level, fmt.Sprintf(format, args...))
-		l.w.Write([]byte(entry))
+		emit_ch <- emit{l.w, []byte(entry)}
+	}
+}
+
+var emit_ch = make(chan emit, 100)
+
+type emit struct {
+	w io.Writer
+	m []byte
+}
+
+func init() {
+	go run_logger()
+}
+
+func run_logger() {
+	for e := range emit_ch {
+		e.w.Write(e.m)
 	}
 }
